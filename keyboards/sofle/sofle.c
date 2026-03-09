@@ -132,6 +132,7 @@ void print_status_narrow(void) {
     oled_write_ln_P(PSTR("CPSLK"), led_usb_state.caps_lock);
     oled_write_ln_P(PSTR("CRRCT"), autocorrect_is_enabled());
     oled_write_ln_P(PSTR("SHIFT"), get_autoshift_state());
+    oled_write_ln_P(PSTR("MAC"), keymap_config.swap_lctl_lgui);
 }
 
 // This function is called for every OLED update, and decides which display to render.
