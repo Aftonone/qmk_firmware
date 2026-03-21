@@ -23,3 +23,8 @@
 
 /* Enable num-lock LED */
 #define NUM_LOCK_LED_INDEX 18
+
+#define BOTH_SHIFT_TURNS_ON_CAPS_WORD
+
+#define TAPPING_TERM 200
+#define RETRO_TAPPING
