@@ -72,6 +72,13 @@ static void render_logo(void) {
 */
 
 static void print_slave_status_narrow(void) {
+    // LINE COST: this panel is 5 chars wide, and a word that exactly
+    // fills a line eats an extra blank line under oled_write_ln_P() --
+    // the cursor wraps to the next line, and the driver's page-advance
+    // then clears it as the "rest of the current" line. So every name
+    // below is either 5 chars or ends in an explicit '\n'. Break this
+    // and the screen comes up one line short: text below shifts up and
+    // the last line stays stale (the framebuffer is only cleared at init).
     oled_write_ln_P(PSTR("LYOUT"), false);
     switch (get_highest_layer(layer_state|default_layer_state)) {
         case 0:
@@ -94,13 +101,16 @@ static void print_slave_status_narrow(void) {
             oled_write_ln_P(PSTR("Base\n"), false);
             break;
         case 2:
-            oled_write_ln_P(PSTR("Base"), false);
+            // Unreachable today (Game is a PDF default layer, never a
+            // transient one), but keep the 2-line cost like the others.
+            oled_write_ln_P(PSTR("Base\n"), false);
             break;
         case 3:
             oled_write_ln_P(PSTR("Symbl"), false);
             break;
         case 4:
-            oled_write_ln_P(PSTR("Mod"), false);
+            // 3-char word, so this '\n' is load-bearing (see LINE COST)
+            oled_write_ln_P(PSTR("Mod\n"), false);
             break;
         case 5:
             oled_write_ln_P(PSTR("Adjst"), false);
