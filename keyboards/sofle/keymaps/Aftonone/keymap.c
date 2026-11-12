@@ -29,6 +29,12 @@ enum {
 #define KC_COLEMAK PDF(_COLEMAK)
 #define KC_GAME PDF(_GAME)
 
+// 1st layer on the encoder cycle
+#define LAYER_CYCLE_START 0
+// Last layer on the encoder cycle
+#define LAYER_CYCLE_END   2
+
+
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 /*
  * QWERTY
@@ -280,5 +286,47 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             }
             break;
     }
+    return true;
+}
+
+static void cycle_base_layer(bool clockwise) {
+    uint8_t current_layer = get_highest_layer(layer_state);
+    if (current_layer < LAYER_CYCLE_START || current_layer > LAYER_CYCLE_END) {
+        return;
+    }
+
+    uint8_t next_layer;
+    if (clockwise) {
+        next_layer = current_layer == LAYER_CYCLE_START ? LAYER_CYCLE_END : current_layer - 1;
+    } else {
+        next_layer = current_layer == LAYER_CYCLE_END ? LAYER_CYCLE_START : current_layer + 1;
+    }
+
+    layer_move(next_layer);
+}
+
+bool encoder_update_user(uint8_t index, bool clockwise) {
+    uint8_t current_layer = get_highest_layer(layer_state);
+    if (current_layer == _MOUSE) {
+        if (index == 0) {
+            tap_code(clockwise ? KC_PGUP : KC_PGDN);
+            return false;
+        }
+    } else if (current_layer == _LOWER) {
+        if (index == 0) {
+            tap_code(clockwise ? KC_UP : KC_DOWN);
+            return false;
+        }
+        if (index == 1) {
+            tap_code(clockwise ? KC_MPRV : KC_MNXT);
+            return false;
+        }
+    } else {
+        if (index == 0) {
+            cycle_base_layer(clockwise);
+            return false;
+        }
+    }
+
     return true;
 }

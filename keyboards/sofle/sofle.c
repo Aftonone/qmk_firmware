@@ -47,6 +47,20 @@ const uint8_t PROGMEM encoder_hand_swap_config[NUM_ENCODERS] = {1, 0};
 
 #endif
 
+#ifdef ENCODER_ENABLE
+bool encoder_update_kb(uint8_t index, bool clockwise) {
+    if (!encoder_update_user(index, clockwise)) {
+        return false;
+    }
+
+    if (index == 1) {
+        tap_code(clockwise ? KC_VOLD : KC_VOLU);
+    }
+
+    return true;
+}
+#endif
+
 #ifdef OLED_ENABLE
 oled_rotation_t oled_init_kb(oled_rotation_t rotation) {
     if (is_keyboard_master()) {
@@ -70,6 +84,91 @@ static void render_logo(void) {
 
 }
 */
+
+static void draw_speedometer_pixel(uint8_t x, uint8_t y, bool on) {
+    oled_write_pixel(x, y, on);
+    oled_write_pixel(x, y + 1, on);
+}
+
+static void draw_speedometer_line(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1, bool on) {
+    int16_t dx  = x1 > x0 ? x1 - x0 : x0 - x1;
+    int16_t sx  = x0 < x1 ? 1 : -1;
+    int16_t dy  = -(y1 > y0 ? y1 - y0 : y0 - y1);
+    int16_t sy  = y0 < y1 ? 1 : -1;
+    int16_t err = dx + dy;
+
+    while (true) {
+        draw_speedometer_pixel(x0, y0, on);
+        if (x0 == x1 && y0 == y1) {
+            break;
+        }
+
+        int16_t twice_err = 2 * err;
+        if (twice_err >= dy) {
+            err += dy;
+            x0 += sx;
+        }
+        if (twice_err <= dx) {
+            err += dx;
+            y0 += sy;
+        }
+    }
+}
+
+static uint8_t speedometer_arc_height(uint8_t x) {
+    if (x <= 15) {
+        int16_t dx = 15 - x;
+        return 14 * (196 - dx * dx) / 196;
+    }
+
+    uint8_t dx = x - 15;
+    return dx >= 7 ? 13 : 14 - (dx * dx) / 49;
+}
+
+static void draw_wpm_speedometer(uint8_t wpm) {
+    enum {
+        CENTER_X = 15,
+        CENTER_Y = 100,
+        MAX_WPM  = 120,
+    };
+    static bool    initialized;
+    static uint8_t previous_tip_x;
+    static uint8_t previous_tip_y;
+
+    if (wpm > MAX_WPM) {
+        wpm = MAX_WPM;
+    }
+
+    uint8_t tip_x = 1 + (wpm * 28) / MAX_WPM;
+    uint8_t tip_y = CENTER_Y - speedometer_arc_height(tip_x);
+
+    if (initialized) {
+        draw_speedometer_line(CENTER_X, CENTER_Y, previous_tip_x, previous_tip_y, false);
+    }
+
+    for (uint8_t x = 1; x <= 29; x++) {
+        draw_speedometer_pixel(x, CENTER_Y - speedometer_arc_height(x), true);
+    }
+
+    static const uint8_t tick_x[]  = {1, 8, 15, 22, 29};
+    static const int8_t  tick_dx[] = {-1, -1, 0, 1, 1};
+    static const int8_t  tick_dy[] = {-1, -2, -3, -2, -1};
+    for (uint8_t i = 0; i < ARRAY_SIZE(tick_x); i++) {
+        uint8_t x = tick_x[i];
+        uint8_t y = CENTER_Y - speedometer_arc_height(x);
+        draw_speedometer_line(x, y, x + tick_dx[i], y + tick_dy[i], true);
+    }
+
+    draw_speedometer_line(CENTER_X, CENTER_Y, tip_x, tip_y, true);
+    oled_write_pixel(CENTER_X, CENTER_Y, true);
+    oled_write_pixel(CENTER_X - 1, CENTER_Y, true);
+    oled_write_pixel(CENTER_X + 1, CENTER_Y, true);
+    oled_write_pixel(CENTER_X, CENTER_Y - 1, true);
+
+    previous_tip_x = tip_x;
+    previous_tip_y = tip_y;
+    initialized    = true;
+}
 
 static void print_slave_status_narrow(void) {
     // LINE COST: this panel is 5 chars wide, and a word that exactly
@@ -121,16 +220,20 @@ static void print_slave_status_narrow(void) {
         default:
             oled_write_ln_P(PSTR("Undef"), false);
     }
-    oled_write_ln_P(PSTR("-----"), false);
-    oled_write_ln_P(PSTR("WPM"), false);
+    oled_write_ln_P(PSTR("\n"), false);
 
-    uint8_t n = get_current_wpm();
-    char wpm_str[4];
+    uint8_t wpm = get_current_wpm();
+    char    wpm_str[4];
+    if (wpm > 120) {
+        wpm = 120;
+    }
+    wpm_str[0] = '0' + wpm / 100;
+    wpm_str[1] = '0' + (wpm / 10) % 10;
+    wpm_str[2] = '0' + wpm % 10;
     wpm_str[3] = '\0';
-    wpm_str[2] = '0' + n % 10;
-    wpm_str[1] = '0' + (n /= 10) % 10;
-    wpm_str[0] = '0' + n / 10;
 
+    draw_wpm_speedometer(wpm);
+    oled_set_cursor(1, 13);
     oled_write(wpm_str, false);
 }
 
@@ -155,40 +258,6 @@ bool oled_task_kb(void) {
     } else {
         //render_logo();
         print_slave_status_narrow();
-    }
-    return true;
-}
-#endif
-
-//Set encoder keycodes here.
-// Encoder 0 is left encoder, 1 is right encoder
-#ifdef ENCODER_ENABLE
-bool encoder_update_kb(uint8_t index, bool clockwise) {
-    if (!encoder_update_user(index, clockwise)) {
-        return false;
-    }
-    if (get_highest_layer(layer_state) == 6) { // Mouse layer
-        if (index == 0) {
-            if (clockwise) {
-                tap_code(KC_PGUP);
-            } else {
-                tap_code(KC_PGDN);
-            }
-        }
-    } else {
-        if (index == 0) {
-            if (clockwise) {
-                tap_code(KC_MPRV);
-            } else {
-                tap_code(KC_MNXT);
-            }
-        } else if (index == 1) {
-            if (clockwise) {
-                tap_code(KC_VOLD);
-            } else {
-                tap_code(KC_VOLU);
-            }
-        }
     }
     return true;
 }
