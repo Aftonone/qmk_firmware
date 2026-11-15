@@ -132,11 +132,15 @@ static void draw_wpm_speedometer(uint8_t wpm) {
         MAX_WPM  = 120,
     };
     static bool    initialized;
+    static uint8_t previous_wpm;
     static uint8_t previous_tip_x;
     static uint8_t previous_tip_y;
 
     if (wpm > MAX_WPM) {
         wpm = MAX_WPM;
+    }
+    if (initialized && wpm == previous_wpm) {
+        return;
     }
 
     uint8_t tip_x = 1 + (wpm * 28) / MAX_WPM;
@@ -167,6 +171,7 @@ static void draw_wpm_speedometer(uint8_t wpm) {
 
     previous_tip_x = tip_x;
     previous_tip_y = tip_y;
+    previous_wpm  = wpm;
     initialized    = true;
 }
 
